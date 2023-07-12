@@ -4,8 +4,8 @@ admin
 root
 root
 
-root
+admin
 password
 
-calvin
 root
+password
