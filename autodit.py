@@ -51,7 +51,8 @@ class colors:
 
 summary = []
 
-def scrapForm():
+def scrapForm(url, https_possible):
+    print("[*] URL: " + url)
     # Removes SSL Issues With Chrome
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
@@ -82,6 +83,8 @@ def scrapForm():
                     potential_input_username.append(i)
     except Exception:
         print(colors.RED+"[-] No form found on " + url + colors.RESET)
+        if https_possible:
+            scrapForm(url.replace("http://", "https://"), False)
     finally:
         if len(potential_input_password) != 1 or len(potential_input_username) > 1 or len(potential_input_submit) > 1:
             print(colors.RED+"[-] Unable to brute-force on " + url + colors.RESET)
@@ -154,17 +157,19 @@ print("[*] Wordlist: " + args.wordlist)
 
 for line in res_nmap.split('\n'):
     if "80/open" in line or "443/open" in line:
+        https_possible = False
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', line).group()
         if ip_match == "192.168.152.130": #FOR DEV
             ip_match = ip_match+"/dvwa/" #FOR DEV
         if "80/open" in line:
             url = "http://"+ip_match
+            if "443/open" in line:
+                https_possible = True
         else:
             url = "https://"+ip_match
         #webbrowser.open(url)
 
-        print("[*] URL: " + url)
-        scrapForm()
+        scrapForm(url, https_possible)
 
 print("\n\n[*] Summary:")
 if len(summary) == 0:
