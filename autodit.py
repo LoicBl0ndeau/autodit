@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import subprocess
 import re
@@ -7,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from ftplib import FTP
 import os #FOR DEV
 from colorama import just_fix_windows_console
 just_fix_windows_console()
@@ -51,8 +53,30 @@ class colors:
 
 summary = []
 
+def get_ip_address(line):
+    ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', line).group()
+    print("[*] IP: " + ip_match)
+    return ip_match
+
+def check_anonymous_login(ip_address):
+    try:
+        ftp = FTP()
+        ftp.connect(ip_address, 21)
+        response = ftp.login('anonymous', 'mozilla@example.com')
+        banner = ftp.getwelcome()
+        if '230' in response:
+            ftp_rights_log = colors.BOLD + colors.GREEN + "[+] Anonymous READ/WRITE on " + ip_address + " - " + banner + colors.RESET
+        elif '530' in response:
+            ftp_rights_log = colors.BOLD + colors.GREEN + "[+] Anonymous READ on " + ip_address + " - " + banner + colors.RESET
+        else:
+            ftp_rights_log = colors.RED+"[-] No ftp anonymous login on "+ ip_address + " - " + banner + colors.RESET
+    except:
+        ftp_rights_log = colors.RED+"[-] Error while trying ftp anonymous login on "+ ip_address + colors.RESET
+
+    print(ftp_rights_log)
+    summary.append(ftp_rights_log)
+
 def scrapForm(url, https_possible):
-    print("[*] URL: " + url)
     # Removes SSL Issues With Chrome
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
@@ -156,9 +180,12 @@ print("[*] User-Agent: " + args.agent)
 print("[*] Wordlist: " + args.wordlist)
 
 for line in res_nmap.split('\n'):
+    if "21/open" in line:
+        ip_match = get_ip_address(line)
+        check_anonymous_login(ip_match)
     if "80/open" in line or "443/open" in line:
+        ip_match = get_ip_address(line)
         https_possible = False
-        ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', line).group()
         if ip_match == "192.168.152.130": #FOR DEV
             ip_match = ip_match+"/dvwa/" #FOR DEV
         if "80/open" in line:
@@ -168,12 +195,11 @@ for line in res_nmap.split('\n'):
         else:
             url = "https://"+ip_match
         #webbrowser.open(url)
-
         scrapForm(url, https_possible)
 
 print("\n\n[*] Summary:")
 if len(summary) == 0:
-    print("No login found")
+    print("Nothing found")
 else:
     for log in summary:
         print(log)
