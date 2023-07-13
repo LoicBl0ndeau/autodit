@@ -143,7 +143,7 @@ if not os.path.exists(args.ip+"-24.g"): #FOR DEV
     output, error = process.communicate()
 
     if error:
-        print("An error occurred:", error.decode("utf-8"))
+        print(colors.RED+"[-] An error occurred: " + error.decode("utf-8") + colors.RESET)
         exit(1)
 
     print(colors.BOLD + colors.GREEN + "[+] Scan done and saved as "+args.ip+"-24.xml" + colors.RESET)
