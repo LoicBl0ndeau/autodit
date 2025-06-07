@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+import xml.etree.ElementTree as ET
+import sys
 import argparse
-import subprocess
-import re
 import webbrowser
 import requests
 from selenium import webdriver
@@ -9,30 +9,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from ftplib import FTP
-import os #FOR DEV
 from colorama import just_fix_windows_console
 just_fix_windows_console()
 
 requests.packages.urllib3.disable_warnings()
 
-AsciiArt = """
+AsciiArt = r"""
       ___           ___                      ___                                             
      /\  \         /\  \                    /\  \         _____                              
     /::\  \        \:\  \         ___      /::\  \       /::\  \       ___           ___     
    /:/\:\  \        \:\  \       /\__\    /:/\:\  \     /:/\:\  \     /\__\         /\__\    
-  /:/ /::\  \   ___  \:\  \     /:/  /   /:/  \:\  \   /:/  \:\__\   /:/__/        /:/  /    
- /:/_/:/\:\__\ /\  \  \:\__\   /:/__/   /:/__/ \:\__\ /:/__/ \:|__| /::\  \       /:/__/     
+  /:/ /::\  \   ___  \:\  \     /:/  /   /:/  \:\  \   /:/  \:\  \   /:/__/        /:/  /    
+ /:/_/:/\:\__\ /\  \  \:\__\   /:/__/   /:/__/ \:\__\ /:/__/ \:\__\ /::\  \       /:/__/     
  \:\/:/  \/__/ \:\  \ /:/  /  /::\  \   \:\  \ /:/  / \:\  \ /:/  / \/\:\  \__   /::\  \     
   \::/__/       \:\  /:/  /  /:/\:\  \   \:\  /:/  /   \:\  /:/  /     \:\/\__\ /:/\:\  \    
    \:\  \        \:\/:/  /   \/__\:\  \   \:\/:/  /     \:\/:/  /       \::/  / \/  \:\  \   
     \:\__\        \::/  /         \:\__\   \::/  /       \::/  /        /:/  /       \:\__\  
      \/__/         \/__/           \/__/    \/__/         \/__/         \/__/         \/__/  
-
-
-
-
-
-
 """
 print(AsciiArt)
 
@@ -53,10 +46,18 @@ class colors:
 
 summary = []
 
-def get_ip_address(line):
-    ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', line).group()
-    print("[*] IP: " + ip_match)
-    return ip_match
+def parse_xml(xml_file):
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+    for host in root.findall('host'):
+        ip = host.find('address').attrib['addr']
+        ports = []
+        for port in host.findall('ports/port'):
+            portid = port.attrib['portid']
+            state = port.find('state').attrib['state']
+            if state == 'open':
+                ports.append(portid)
+        res_nmap.append([ip] + ports)
 
 def check_anonymous_login(ip_address):
     try:
@@ -66,15 +67,15 @@ def check_anonymous_login(ip_address):
         banner = ftp.getwelcome()
         if '230' in response:
             ftp_rights_log = colors.BOLD + colors.GREEN + "[+] Anonymous READ/WRITE on " + ip_address + " - " + banner + colors.RESET
+            summary.append(ftp_rights_log)
         elif '530' in response:
             ftp_rights_log = colors.BOLD + colors.GREEN + "[+] Anonymous READ on " + ip_address + " - " + banner + colors.RESET
+            summary.append(ftp_rights_log)
         else:
             ftp_rights_log = colors.RED+"[-] No ftp anonymous login on "+ ip_address + " - " + banner + colors.RESET
     except:
         ftp_rights_log = colors.RED+"[-] Error while trying ftp anonymous login on "+ ip_address + colors.RESET
-
     print(ftp_rights_log)
-    summary.append(ftp_rights_log)
 
 def scrapForm(url, https_possible):
     # Removes SSL Issues With Chrome
@@ -120,7 +121,7 @@ def scrapForm(url, https_possible):
             driver.quit()
 
 def send(redirected_url, input_username, input_password, input_submit):
-    with open("wordlist.txt", 'r') as f:
+    with open(args.wordlist, 'r') as f:
         found = False
         for logins in f.read().split("\n\n"):
             username = logins.split("\n")[0]
@@ -154,48 +155,65 @@ def send(redirected_url, input_username, input_password, input_submit):
             print(colors.RED+"[-] No login found on " + url + colors.RESET)
 
 parser = argparse.ArgumentParser(description="Autodit by 123CS")
-parser.add_argument('--ip', help="IP class to scan (searching in /24)", required=True)
+parser.add_argument('--xml', help="Your nmap xml output.", required=True)
 parser.add_argument('--agent', help="User agent string to send the login as. Default : Agent:Mozilla/5.0", default="Mozilla/5.0", required=False)
-parser.add_argument('--wordlist', help="Name of the wordlist file to use. It must be in the format : login1 \\n password1 \\n\\n login2 \\n password2", default="wordlist.txt", required=False)
+parser.add_argument('--wordlist', help="Name of the wordlist file to use. It must be in the format : login1 \\n password1 \\n\\n login2 \\n password2. If no wordlist is provided, brute-force is skipped and webpages opened.", required=False)
 args = parser.parse_args()
 
-print("[*] Scanning...")
-if not os.path.exists(args.ip+"-24.g"): #FOR DEV
-    command = "nmap -T4 -F -Pn -oX "+args.ip+"-24.xml -oG - "+args.ip+"/24"
+res_nmap = []
+parse_xml(args.xml)
 
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = process.communicate()
+print("[*] Nmap XML well parsed")
+if args.wordlist == None:
+    brute_force = False
+    print("[*] No wordlist provided, skipping brute-force")
+else:
+    try:
+        with open(args.wordlist, 'r') as f:
+            pass
+    except:
+        print(colors.RED+"[-] Wordlist file not found"+colors.RESET)
+        sys.exit(1)
+    brute_force = True
+    print("[*] User-Agent: " + args.agent)
+    print("[*] Wordlist: " + args.wordlist)
 
-    if error:
-        print(colors.RED+"[-] An error occurred: " + error.decode("utf-8") + colors.RESET)
-        exit(1)
-
-    print(colors.BOLD + colors.GREEN + "[+] Scan done and saved as "+args.ip+"-24.xml" + colors.RESET)
-    res_nmap = output.decode("utf-8")
-else: #FOR DEV
-    with open(args.ip+"-24.g", 'r') as f: #FOR DEV
-        res_nmap = f.read() #FOR DEV
-
-print("[*] User-Agent: " + args.agent)
-print("[*] Wordlist: " + args.wordlist)
-
-for line in res_nmap.split('\n'):
-    if "21/open" in line:
-        ip_match = get_ip_address(line)
-        check_anonymous_login(ip_match)
-    if "80/open" in line or "443/open" in line:
-        ip_match = get_ip_address(line)
-        https_possible = False
-        if ip_match == "192.168.152.130": #FOR DEV
-            ip_match = ip_match+"/dvwa/" #FOR DEV
-        if "80/open" in line:
-            url = "http://"+ip_match
-            if "443/open" in line:
+smb = [] #445
+alternative_ports = []
+for machine in res_nmap:
+    ip_address = machine[0]
+    for port in machine[1:]:
+        if port == '21':
+            check_anonymous_login(ip_address)
+        elif port == '80':
+            if '443' in machine[1:]:
+                url = "https://"+ip_address
                 https_possible = True
-        else:
-            url = "https://"+ip_match
-        #webbrowser.open(url)
-        scrapForm(url, https_possible)
+            else:
+                https_possible = False
+                url = "http://"+ip_address
+            if brute_force:
+                scrapForm(url, https_possible)
+            else:
+                webbrowser.open(url)
+        elif port == '443' and '80' not in machine[1:]:
+            url = "https://"+ip_address
+            if brute_force:
+                scrapForm(url, https_possible)
+            else:
+                webbrowser.open(url)
+        elif port == '8000' or port == '8080' or port == '8443':
+            alternative_ports.append(ip_address+':'+port)
+        elif port == '445':
+            smb.append(ip_address)
+
+if alternative_ports:
+    print("\n[*] Interesting alternative opened ports (try https if no results):")
+    print("\n".join(alternative_ports))
+
+if smb:
+    print("\n[*] IP addresses with port 445 opened (scan them with smbmap and ms17 with metasploit):")
+    print(" ".join(smb))
 
 print("\n\n[*] Summary:")
 if len(summary) == 0:
